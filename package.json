@@ -1,5 +1,5 @@
 {
-      "name": "Embroidery Estimating App (Community)",
+      "name": "embroidery-cost-estimator",
       "version": "0.1.0",
       "private": true,
       "dependencies": {
