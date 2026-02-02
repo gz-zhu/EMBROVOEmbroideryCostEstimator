@@ -23,11 +23,11 @@ import {
   Zap,
   FileDown,
 } from "lucide-react";
-import { pdf } from '@react-pdf/renderer';
-import { saveAs } from 'file-saver';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 import backgroundImage from './public/OC 03.png';
 import logoImage from './public/logo.png';
-import { EstimatePDF } from './EstimatePDF';
+import logoBlackImage from './public/logoblack.png';
 
 interface EstimateData {
   companyName: string;
@@ -104,15 +104,6 @@ const PRESETS = {
     numberOfAppliques: 0,
     appliqueRate: 100,
   },
-};
-
-// 复杂度选项的显示文本映射
-const COMPLEXITY_LABELS: { [key: string]: string } = {
-  '0.8': '簡易（テキスト・シンプル図形）',
-  '1.0': '標準（通常のデザイン）',
-  '1.2': '複雑（細部のあるデザイン）',
-  '1.5': '高密度（緻密なアートワーク）',
-  '2.0': 'プレミアム（写真・3D刺繍）',
 };
 
 export default function App() {
@@ -206,26 +197,175 @@ export default function App() {
   };
 
   const generatePDF = async () => {
+    const doc = new jsPDF() as any;
+    const currentDate = new Date().toLocaleDateString('ja-JP');
+
+    // 添加Logo (使用 logoblack.png)
     try {
-      const currentDate = new Date().toLocaleDateString('ja-JP');
-
-      const blob = await pdf(
-        <EstimatePDF
-          estimateData={estimateData}
-          breakdown={breakdown}
-          currentDate={currentDate}
-        />
-      ).toBlob();
-
-      const filename = estimateData.projectName
-        ? `${estimateData.projectName}_見積書.pdf`
-        : "刺繍見積書.pdf";
-
-      saveAs(blob, filename);
+      const img = new Image();
+      img.src = logoBlackImage;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      // 在PDF顶部居中添加logo
+      const imgWidth = 50;
+      const imgHeight = (img.height * imgWidth) / img.width;
+      const xPos = (doc.internal.pageSize.width - imgWidth) / 2;
+      doc.addImage(img, 'PNG', xPos, 10, imgWidth, imgHeight);
     } catch (error) {
-      console.error('PDF生成エラー:', error);
-      alert('PDFの生成に失敗しました。もう一度お試しください。');
+      console.log('Logo読み込みをスキップしました');
     }
+
+    // 标题 - 完全日文化
+    doc.setFontSize(20);
+    doc.text("SHISHU MITSUMORI-SHO", 105, 40, { align: "center" });
+
+    doc.setFontSize(12);
+    doc.text(estimateData.companyName, 20, 55);
+    doc.text("Hizuke: " + currentDate, 150, 55);
+
+    // 项目详情 - 完全日文化
+    doc.setFontSize(14);
+    doc.text("Project Shosai:", 20, 70);
+
+    const projectDetails = [
+      ['Koumoku', 'Naiyou'],
+      ['Anken-mei (Hinmei)', estimateData.projectName || "Mudai Project"],
+      ['Suuryou', `${estimateData.quantity} ten`],
+      ['1-ten atari no hari-su', `${estimateData.stitches.toLocaleString()} hari`],
+      ['Nanido', `${estimateData.complexityMultiplier} bai`],
+    ];
+
+    if (estimateData.numberOfAppliques > 0) {
+      projectDetails.push(['Applique', `1-ten atari ${estimateData.numberOfAppliques} ko`]);
+    }
+    if (estimateData.rushOrder) {
+      projectDetails.push(['Tokkyu Taiou', 'Ari (+¥4,000)']);
+    }
+
+    autoTable(doc, {
+      startY: 75,
+      body: projectDetails,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [41, 128, 185],
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      styles: {
+        font: 'helvetica',
+        fontSize: 10,
+      },
+      columnStyles: {
+        0: { cellWidth: 60, fontStyle: 'bold' },
+        1: { cellWidth: 110 }
+      },
+      margin: { left: 20, right: 20 },
+    });
+
+    // 价格明细 - 完全日文化
+    const lastY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFontSize(14);
+    doc.text("Ryoukin Uchiwake (1-ten atari):", 20, lastY);
+
+    const costDetails = [];
+
+    costDetails.push([
+      `Shishu Kakou-chin (${estimateData.stitches.toLocaleString()} hari)`,
+      `¥${Math.round(breakdown.stitchCost).toLocaleString()}`
+    ]);
+
+    if (breakdown.complexityAdjustment > 0) {
+      costDetails.push([
+        'Nanido ni yoru Chousei',
+        `¥${Math.round(breakdown.complexityAdjustment).toLocaleString()}`
+      ]);
+    }
+
+    const setupFeeLabel = estimateData.quantity > 1
+      ? `Shishu Kata-dai (Shokai nomi) (¥${estimateData.setupFee.toLocaleString()} ÷ ${estimateData.quantity})`
+      : 'Shishu Kata-dai (Shokai nomi)';
+
+    costDetails.push([
+      setupFeeLabel,
+      `¥${Math.round(breakdown.setupFee).toLocaleString()}`
+    ]);
+
+    if (estimateData.materialCost > 0) {
+      costDetails.push([
+        'Body / Kiji-dai',
+        `¥${Math.round(breakdown.materialCost).toLocaleString()}`
+      ]);
+    }
+
+    costDetails.push([
+      'Ito-dai',
+      `¥${Math.round(breakdown.threadCost).toLocaleString()}`
+    ]);
+
+    if (breakdown.appliqueCost > 0) {
+      costDetails.push([
+        `Applique Hiyou (${estimateData.numberOfAppliques} ko)`,
+        `¥${Math.round(breakdown.appliqueCost).toLocaleString()}`
+      ]);
+    }
+
+    if (breakdown.rushFee > 0) {
+      costDetails.push([
+        'Tokkyu Taiou-hi (Ichiritsu)',
+        `¥${Math.round(breakdown.rushFee).toLocaleString()}`
+      ]);
+    }
+
+    autoTable(doc, {
+      startY: lastY + 5,
+      body: costDetails,
+      theme: 'striped',
+      styles: {
+        font: 'helvetica',
+        fontSize: 10,
+      },
+      columnStyles: {
+        0: { cellWidth: 120 },
+        1: { cellWidth: 50, halign: 'right', fontStyle: 'bold' }
+      },
+      margin: { left: 20, right: 20 },
+    });
+
+    // 总计 - 完全日文化
+    const finalY = (doc as any).lastAutoTable.finalY + 10;
+
+    const totalDetails = [
+      ['1-ten atari no Goukei', `¥${Math.round(breakdown.total).toLocaleString()}`],
+      [`Sou-goukei (${estimateData.quantity} ten)`, `¥${Math.round(breakdown.grandTotal).toLocaleString()}`],
+    ];
+
+    autoTable(doc, {
+      startY: finalY,
+      body: totalDetails,
+      theme: 'grid',
+      styles: {
+        font: 'helvetica',
+        fontSize: 12,
+        fontStyle: 'bold',
+      },
+      columnStyles: {
+        0: { cellWidth: 120, fillColor: [52, 152, 219], textColor: [255, 255, 255] },
+        1: { cellWidth: 50, halign: 'right', fillColor: [241, 196, 15], textColor: [0, 0, 0] }
+      },
+      margin: { left: 20, right: 20 },
+    });
+
+    // 页脚 - 完全日文化
+    doc.setFontSize(10);
+    const footerY = (doc as any).lastAutoTable.finalY + 15;
+    doc.text("Hon mitsumori wa 30-nichi-kan yuukou desu. Sho-jouken ga tekiyou saremasu.", 20, footerY);
+
+    const filename = estimateData.projectName
+      ? `${estimateData.projectName.replace(/[^a-z0-9]/gi, "_")}_mitsumori.pdf`
+      : "shishu_mitsumori.pdf";
+    doc.save(filename);
   };
 
   return (
@@ -491,7 +631,7 @@ export default function App() {
                   </Label>
                   <Select
                     value={estimateData.complexityMultiplier.toString()}
-                    onValueChange={(value: string) =>
+                    onValueChange={(value) =>
                       updateField(
                         "complexityMultiplier",
                         parseFloat(value),
@@ -499,9 +639,7 @@ export default function App() {
                     }
                   >
                     <SelectTrigger className="text-sm h-8">
-                      <SelectValue>
-                        {COMPLEXITY_LABELS[estimateData.complexityMultiplier.toString()]}
-                      </SelectValue>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="0.8">
