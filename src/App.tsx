@@ -118,7 +118,7 @@ const COMPLEXITY_LABELS: { [key: string]: string } = {
 export default function App() {
   const [estimateData, setEstimateData] =
     useState<EstimateData>({
-      companyName: "Beauxsacs Embroidery and Monogramming",
+      companyName: "",
       projectName: "",
       quantity: 1,
       stitches: 8000,
