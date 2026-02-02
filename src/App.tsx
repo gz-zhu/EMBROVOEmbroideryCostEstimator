@@ -500,7 +500,11 @@ export default function App() {
                   >
                     <SelectTrigger className="text-sm h-8">
                       <SelectValue>
-                        {COMPLEXITY_LABELS[estimateData.complexityMultiplier.toString()]}
+                        {estimateData.complexityMultiplier === 0.8 && '簡易（テキスト・シンプル図形）'}
+                        {estimateData.complexityMultiplier === 1.0 && '標準（通常のデザイン）'}
+                        {estimateData.complexityMultiplier === 1.2 && '複雑（細部のあるデザイン）'}
+                        {estimateData.complexityMultiplier === 1.5 && '高密度（緻密なアートワーク）'}
+                        {estimateData.complexityMultiplier === 2.0 && 'プレミアム（写真・3D刺繍）'}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
